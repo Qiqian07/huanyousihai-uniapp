@@ -25,6 +25,17 @@ npm run build:mp-weixin # 微信小程序生产构建 → dist/build/mp-weixin
 npm test                # 佣金引擎单元测试（24 条）
 ```
 
+**前提：本机要装 Node.js 18+**（`node -v` 能出版本号才算装好）。没装的话下面这些命令都会报「不是内部或外部命令」。
+
+不想敲命令的话，Windows 直接双击：
+
+| 双击 | 作用 |
+| --- | --- |
+| `dev.bat` | 开发模式，自动装依赖并启动 http://localhost:5180 |
+| `start.bat` | 预览构建产物，缺构建时会先自动 build，然后起服务并打开浏览器 |
+
+这两个脚本会自己探测 Node（注册表路径、Program Files、scoop、nvm、PATH 依次尝试），**不依赖系统 PATH**，找不到时会提示去装。
+
 ### ⚠️ 不要双击 `dist/build/h5/index.html`
 
 uni-app 的 H5 产物是 ES module，**用 `file://` 打开会被浏览器 CORS 拦掉脚本和样式，页面白屏**（控制台报
@@ -34,11 +45,10 @@ uni-app 的 H5 产物是 ES module，**用 `file://` 打开会被浏览器 CORS 
 
 | 方式 | 操作 | 地址 |
 | --- | --- | --- |
-| 开发模式（推荐） | `npm run dev:h5` | http://localhost:5180 |
-| 预览构建产物 | `npm run build:h5` 后 `npm run preview` | http://127.0.0.1:5181 |
-| Windows 双击 | 双击工程根目录的 `start.bat` | 自动开浏览器 |
+| 开发模式（推荐） | `npm run dev:h5` 或双击 `dev.bat` | http://localhost:5180 |
+| 预览构建产物 | `npm run build:h5` 后 `npm run preview`，或双击 `start.bat` | http://127.0.0.1:5181 |
 
-`start.bat` / `serve.mjs` 是零依赖静态服务器：端口被占用会自动顺延，找不到构建产物会直接提示先 `npm run build:h5`。
+`start.bat` / `dev.bat` 内部调用 `scripts/find-node.cmd` 定位 Node，`serve.mjs` 是零依赖静态服务器：端口被占用会自动顺延，找不到构建产物会先自动构建。
 
 微信小程序：用微信开发者工具「导入项目」，目录选 `dist/build/mp-weixin`（`manifest.json` 里的 `mp-weixin.appid` 需填自己的 AppID）。
 
