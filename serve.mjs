@@ -61,8 +61,17 @@ const server = http.createServer((req, res) => {
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     filePath = path.join(filePath, 'index.html')
   }
-  // 不存在 → 回落 index.html（H5 为 hash 路由，刷新子路径也能命中）
-  if (!fs.existsSync(filePath)) filePath = path.join(target, 'index.html')
+  // 不存在 → 只有「页面请求」（无扩展名或 .html）才回落 index.html；
+  // 静态资源找不到就老老实实 404，避免把 HTML 当 JS 返回触发 MIME 报错
+  if (!fs.existsSync(filePath)) {
+    const ext = path.extname(filePath).toLowerCase()
+    if (ext && ext !== '.html') {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+      res.end('404 ' + urlPath)
+      return
+    }
+    filePath = path.join(target, 'index.html')
+  }
 
   fs.readFile(filePath, (err, buf) => {
     if (err) {
@@ -70,8 +79,23 @@ const server = http.createServer((req, res) => {
       res.end('500')
       return
     }
+    const ext = path.extname(filePath).toLowerCase()
+    // 兜底：若产物用相对路径（./assets/...），从 /pages/xxx/ 这类深层地址打开时
+    // 浏览器会把 ./assets 解析成 /pages/xxx/assets → 404 → 又被回落成 index.html，
+    // 于是脚本以 text/html 返回触发 MIME 报错白屏。这里统一改成根绝对路径。
+    if (ext === '.html') {
+      const fixed = buf
+        .toString('utf8')
+        .replace(/(href|src)="\.\//g, '$1="/')
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache'
+      })
+      res.end(fixed)
+      return
+    }
     res.writeHead(200, {
-      'Content-Type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+      'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': 'no-cache'
     })
     res.end(buf)

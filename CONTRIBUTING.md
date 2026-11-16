@@ -120,7 +120,13 @@ git push origin feat/你的功能名
 ## 7. 常见问题
 
 **页面白屏 / 打不开**
-先看浏览器控制台。如果是 `blocked by CORS` + `file://`，就是用了双击打开，改用 `npm run dev:h5`。
+先看浏览器控制台，分两种：
+
+- 报 `blocked by CORS` + `file://` → 用了双击打开，改用 `npm run dev:h5`。
+- 报 `Expected a JavaScript-or-Wasm module script ... but the server responded with a MIME type of "text/html"` → `src/manifest.json` 里 `h5.router.base` 被改成了相对路径 `"./"`，改回 `"/"` 后重新 `npm run build:h5`。
+
+**单页直达地址怎么写**
+hash 路由，路由要放在 `#` 后面：`http://127.0.0.1:5181/#/pages/mall/index`。写成 `.../pages/mall/index`（没 `#`）只会落到首页，这不是 bug。
 
 **`npm install` 卡住或报错**
 换淘宝镜像：`npm config set registry https://registry.npmmirror.com`，再重新 `npm install`。

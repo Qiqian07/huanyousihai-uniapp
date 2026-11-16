@@ -50,6 +50,33 @@ uni-app 的 H5 产物是 ES module，**用 `file://` 打开会被浏览器 CORS 
 
 `start.bat` / `dev.bat` 内部调用 `scripts/find-node.cmd` 定位 Node，`serve.mjs` 是零依赖静态服务器：端口被占用会自动顺延，找不到构建产物会先自动构建。
 
+### 单页直达要带 hash
+
+H5 走的是 hash 路由，`#` 前面的路径部分不参与路由。想直接打开某一页，路由必须写在 `#` 后面：
+
+| 想打开 | 地址 |
+| --- | --- |
+| 首页 | http://127.0.0.1:5181/ |
+| 商城 | http://127.0.0.1:5181/#/pages/mall/index |
+| 订单中心 | http://127.0.0.1:5181/#/pages/order/index |
+| 提现 | http://127.0.0.1:5181/#/pages/wallet/withdraw |
+| 夜间稿首页 | http://127.0.0.1:5181/?theme=dark#/ |
+
+反例：`http://127.0.0.1:5181/pages/mall/index` 这种写法**只会打开首页**——路径被当成普通文件路径忽略了，不是路由写错了。
+
+### ⚠️ `h5.router.base` 不能改成相对路径
+
+`src/manifest.json` 里必须是 `"router": { "mode": "hash", "base": "/" }`。
+
+如果写成 `"base": "./"`，构建出的 `index.html` 会用 `./assets/index-xxx.js` 引脚本；从 `/pages/xxx` 这类深层地址进入时，浏览器把它拼成 `/pages/xxx/assets/index-xxx.js`，服务器找不到就回落 `index.html`，脚本以 `text/html` 返回 → 浏览器拒绝执行 → **白屏**，控制台报：
+
+```
+Failed to load module script: Expected a JavaScript-or-Wasm module script
+but the server responded with a MIME type of "text/html".
+```
+
+`serve.mjs` 现在做了两道兜底（静态资源找不到直接 404、HTML 里残留的 `./` 自动重写成 `/`），但 base 保持 `"/"` 才是根治。将来若真部署到子目录，改这里的同时记得同步 `serve.mjs`。
+
 微信小程序：用微信开发者工具「导入项目」，目录选 `dist/build/mp-weixin`（`manifest.json` 里的 `mp-weixin.appid` 需填自己的 AppID）。
 
 ### 夜间稿怎么看
