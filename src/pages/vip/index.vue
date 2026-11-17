@@ -81,8 +81,8 @@ export default {
     go(url) {
       uni.navigateTo({ url })
     },
-    renew() {
-      const r = store.renewVip()
+    async renew() {
+      const r = await store.renewVip()
       if (!r.ok) {
         uni.showModal({
           title: '余额不足',

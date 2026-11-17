@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.hys.mapper.HysMemberMapper">
+
+    <resultMap type="HysMember" id="HysMemberResult">
+        <id     property="memberId"      column="member_id"/>
+        <result property="name"          column="name"/>
+        <result property="phone"         column="phone"/>
+        <result property="password"      column="password"/>
+        <result property="region"        column="region"/>
+        <result property="referrerId"    column="referrer_id"/>
+        <result property="directIndex"   column="direct_index"/>
+        <result property="level"         column="level"/>
+        <result property="vipExpireAt"   column="vip_expire_at"/>
+        <result property="balanceCents"  column="balance_cents"/>
+        <result property="greenPoints"   column="green_points"/>
+        <result property="upgradedAt"    column="upgraded_at"/>
+        <result property="createTime"    column="create_time"/>
+        <result property="delFlag"       column="del_flag"/>
+    </resultMap>
+
+    <sql id="selectColumns">
+        select member_id, name, phone, password, region, referrer_id, direct_index, level,
+               vip_expire_at, balance_cents, green_points, upgraded_at, create_time, del_flag
+        from hys_member
+    </sql>
+
+    <select id="selectByPhone" parameterType="String" resultMap="HysMemberResult">
+        <include refid="selectColumns"/>
+        where phone = #{phone} and del_flag = '0' limit 1
+    </select>
+
+    <select id="selectById" parameterType="Long" resultMap="HysMemberResult">
+        <include refid="selectColumns"/>
+        where member_id = #{memberId} and del_flag = '0'
+    </select>
+
+    <select id="selectList" parameterType="HysMember" resultMap="HysMemberResult">
+        <include refid="selectColumns"/>
+        where del_flag = '0'
+        <if test="name != null and name != ''">and name like concat('%', #{name}, '%')</if>
+        <if test="phone != null and phone != ''">and phone like concat('%', #{phone}, '%')</if>
+        <if test="level != null and level != ''">and level = #{level}</if>
+        order by member_id desc
+    </select>
+
+    <select id="selectDirects" parameterType="Long" resultMap="HysMemberResult">
+        <include refid="selectColumns"/>
+        where referrer_id = #{memberId} and del_flag = '0'
+        order by direct_index asc
+    </select>
+
+    <select id="countDirects" parameterType="Long" resultType="int">
+        select count(*) from hys_member
+        where referrer_id = #{memberId} and del_flag = '0'
+    </select>
+
+    <!-- 团队人数 = 全部后代（递归），不含自己 -->
+    <select id="countDescendants" parameterType="Long" resultType="int">
+        with recursive sub as (
+            select member_id from hys_member
+            where referrer_id = #{memberId} and del_flag = '0'
+            union all
+            select m.member_id from hys_member m
+            join sub s on m.referrer_id = s.member_id
+            where m.del_flag = '0'
+        )
+        select count(*) from sub
+    </select>
+
+    <select id="directIndexOf" parameterType="Long" resultType="int">
+        select direct_index from hys_member where member_id = #{memberId}
+    </select>
+
+    <insert id="insertMember" parameterType="HysMember" useGeneratedKeys="true" keyProperty="memberId">
+        insert into hys_member (name, phone, password, region, referrer_id, direct_index, level,
+                                vip_expire_at, balance_cents, green_points, upgraded_at, create_time, del_flag)
+        values (#{name}, #{phone}, #{password}, #{region}, #{referrerId}, #{directIndex}, #{level},
+                #{vipExpireAt}, #{balanceCents}, #{greenPoints}, #{upgradedAt}, #{createTime}, '0')
+    </insert>
+
+    <update id="updateMember" parameterType="HysMember">
+        update hys_member
+        <set>
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="region != null and region != ''">region = #{region},</if>
+            <if test="referrerId != null">referrer_id = #{referrerId},</if>
+            <if test="directIndex != null">direct_index = #{directIndex},</if>
+            <if test="level != null and level != ''">level = #{level},</if>
+            <if test="vipExpireAt != null">vip_expire_at = #{vipExpireAt},</if>
+            <if test="upgradedAt != null">upgraded_at = #{upgradedAt},</if>
+            <if test="password != null and password != ''">password = #{password},</if>
+            <if test="greenPoints != null">green_points = #{greenPoints},</if>
+        </set>
+        where member_id = #{memberId}
+    </update>
+
+    <!-- COMPLIANCE: 原子扣减，余额不足返回 0 行，防止并发超扣 -->
+    <update id="deductBalance">
+        update hys_member set balance_cents = balance_cents - #{cents}
+        where member_id = #{memberId} and del_flag = '0' and balance_cents &gt;= #{cents}
+    </update>
+
+    <update id="creditBalance">
+        update hys_member set balance_cents = balance_cents + #{cents}
+        where member_id = #{memberId} and del_flag = '0'
+    </update>
+</mapper>

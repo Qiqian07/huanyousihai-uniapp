@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.hys.mapper.HysCommissionMapper">
+
+    <resultMap type="HysCommission" id="HysCommissionResult">
+        <id     property="commissionId"  column="commission_id"/>
+        <result property="orderId"       column="order_id"/>
+        <result property="beneficiaryId" column="beneficiary_id"/>
+        <result property="fromMemberId"  column="from_member_id"/>
+        <result property="level"         column="level"/>
+        <result property="amountCents"   column="amount_cents"/>
+        <result property="status"        column="status"/>
+        <result property="createTime"    column="create_time"/>
+        <result property="fromMemberName" column="from_member_name"/>
+    </resultMap>
+
+    <select id="selectByBeneficiary" parameterType="Long" resultMap="HysCommissionResult">
+        select c.*, m.name as from_member_name
+        from hys_commission c
+        left join hys_member m on m.member_id = c.from_member_id
+        where c.beneficiary_id = #{beneficiaryId}
+        order by c.commission_id desc
+    </select>
+
+    <select id="selectByOrderId" parameterType="String" resultMap="HysCommissionResult">
+        select c.*, m.name as from_member_name
+        from hys_commission c
+        left join hys_member m on m.member_id = c.from_member_id
+        where c.order_id = #{orderId}
+    </select>
+
+    <select id="selectList" parameterType="HysCommission" resultMap="HysCommissionResult">
+        select c.*, m.name as from_member_name
+        from hys_commission c
+        left join hys_member m on m.member_id = c.from_member_id
+        <where>
+            <if test="beneficiaryId != null">and c.beneficiary_id = #{beneficiaryId}</if>
+            <if test="level != null and level != ''">and c.level = #{level}</if>
+            <if test="status != null and status != ''">and c.status = #{status}</if>
+            <if test="orderId != null and orderId != ''">and c.order_id like concat('%', #{orderId}, '%')</if>
+        </where>
+        order by c.commission_id desc
+    </select>
+
+    <insert id="insertCommission" parameterType="HysCommission" useGeneratedKeys="true" keyProperty="commissionId">
+        insert into hys_commission (order_id, beneficiary_id, from_member_id, level, amount_cents, status, create_time)
+        values (#{orderId}, #{beneficiaryId}, #{fromMemberId}, #{level}, #{amountCents}, #{status}, #{createTime})
+    </insert>
+
+    <update id="updateStatus">
+        update hys_commission set status = #{status} where commission_id = #{commissionId}
+    </update>
+</mapper>

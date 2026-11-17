@@ -98,12 +98,12 @@ export default {
     go(url) {
       uni.navigateTo({ url })
     },
-    upgrade() {
+    async upgrade() {
       if (this.isVip) {
         uni.navigateTo({ url: '/pages/album/index' })
         return
       }
-      const r = store.upgradeVip()
+      const r = await store.upgradeVip()
       if (!r.ok) {
         uni.showModal({
           title: '余额不足',

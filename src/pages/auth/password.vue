@@ -30,13 +30,13 @@ export default {
     return { oldPwd: '', newPwd: '', confirmPwd: '', error: '' }
   },
   methods: {
-    submit() {
+    async submit() {
       if (this.newPwd !== this.confirmPwd) {
         this.error = ''
         store.toast('两次输入的新密码不一致')
         return
       }
-      const r = store.changePassword(this.oldPwd, this.newPwd)
+      const r = await store.changePassword(this.oldPwd, this.newPwd)
       if (!r.ok) {
         this.error = r.message
         return

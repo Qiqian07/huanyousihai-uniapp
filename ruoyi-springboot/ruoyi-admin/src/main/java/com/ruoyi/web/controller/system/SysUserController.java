@@ -1,0 +1,264 @@
+package com.ruoyi.web.controller.system;
+
+import java.util.List;
+import java.util.stream.Collectors;
+import jakarta.servlet.http.HttpServletResponse;
+import org.apache.commons.lang3.ArrayUtils;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import com.ruoyi.common.annotation.Log;
+import com.ruoyi.common.core.controller.BaseController;
+import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.core.domain.entity.SysDept;
+import com.ruoyi.common.core.domain.entity.SysRole;
+import com.ruoyi.common.core.domain.entity.SysUser;
+import com.ruoyi.common.core.page.TableDataInfo;
+import com.ruoyi.common.enums.BusinessType;
+import com.ruoyi.common.utils.SecurityUtils;
+import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.common.utils.file.FileUploadUtils;
+import com.ruoyi.common.utils.file.MimeTypeUtils;
+import com.ruoyi.common.utils.poi.ExcelUtil;
+import com.ruoyi.framework.web.service.TokenService;
+import com.ruoyi.system.service.ISysDeptService;
+import com.ruoyi.system.service.ISysPostService;
+import com.ruoyi.system.service.ISysRoleService;
+import com.ruoyi.system.service.ISysUserService;
+
+/**
+ * 用户信息
+ * 
+ * @author HackerSnail <2306002088@qq.com>
+ */
+@RestController
+@RequestMapping("/system/user")
+public class SysUserController extends BaseController {
+    private final ISysUserService userService;
+
+    private final ISysRoleService roleService;
+
+    private final ISysDeptService deptService;
+
+    private final ISysPostService postService;
+
+    private final TokenService tokenService;
+
+    public SysUserController(ISysUserService userService, ISysRoleService roleService,
+            ISysDeptService deptService, ISysPostService postService, TokenService tokenService) {
+        this.userService = userService;
+        this.roleService = roleService;
+        this.deptService = deptService;
+        this.postService = postService;
+        this.tokenService = tokenService;
+    }
+
+    /**
+     * 获取用户列表
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:list')")
+    @GetMapping("/list")
+    public TableDataInfo list(SysUser user) {
+        startPage();
+        List<SysUser> list = userService.selectUserList(user);
+        return getDataTable(list);
+    }
+
+    /**
+     * 导出用户列表
+     */
+    @Log(title = "用户管理", businessType = BusinessType.EXPORT)
+    @PreAuthorize("@ss.hasPermi('system:user:export')")
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, SysUser user) {
+        List<SysUser> list = exportLimit(() -> userService.selectUserList(user));
+        ExcelUtil<SysUser> util = new ExcelUtil<>(SysUser.class);
+        util.exportExcel(response, list, "用户数据");
+    }
+
+    /**
+     * 导入用户数据
+     * 
+     * @param updateSupport 已存在的用户名是否更新其数据（false 则仅新增、重复报错）
+     */
+    @Log(title = "用户管理", businessType = BusinessType.IMPORT)
+    @PreAuthorize("@ss.hasPermi('system:user:import')")
+    @PostMapping("/importData")
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        // 前置类型拦截：导入直接读 file 流、不经 FileUploadUtils 白名单，历史对扩展名零校验；
+        // 这里按 IMPORT_EXTENSION(xls/xlsx) 早拒非 Excel，避免把任意文件交给 POI 解析
+        String extension = FileUploadUtils.getExtension(file);
+        if (!FileUploadUtils.isAllowedExtension(extension, MimeTypeUtils.IMPORT_EXTENSION)) {
+            return error(StringUtils.format("导入文件类型({})非法，仅允许 {} 格式", extension,
+                    String.join(", ", MimeTypeUtils.IMPORT_EXTENSION)));
+        }
+        ExcelUtil<SysUser> util = new ExcelUtil<>(SysUser.class);
+        List<SysUser> userList = util.importExcel(file.getInputStream());
+        String operName = getUsername();
+        String message = userService.importUser(userList, updateSupport, operName);
+        return success(message);
+    }
+
+    /**
+     * 下载用户导入模板
+     */
+    @PostMapping("/importTemplate")
+    public void importTemplate(HttpServletResponse response) {
+        ExcelUtil<SysUser> util = new ExcelUtil<>(SysUser.class);
+        util.importTemplateExcel(response, "用户数据");
+    }
+
+    /**
+     * 根据用户编号获取详细信息
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:query')")
+    @GetMapping(value = { "/", "/{userId}" })
+    public AjaxResult getInfo(@PathVariable(value = "userId", required = false) Long userId) {
+        AjaxResult ajax = AjaxResult.success();
+        if (StringUtils.isNotNull(userId)) {
+            userService.checkUserDataScope(userId);
+            SysUser sysUser = userService.selectUserById(userId);
+            ajax.put(AjaxResult.DATA_TAG, sysUser);
+            ajax.put("postIds", postService.selectPostListByUserId(userId));
+            ajax.put("roleIds", sysUser.getRoles().stream().map(SysRole::getRoleId).collect(Collectors.toList()));
+        }
+        List<SysRole> roles = roleService.selectRoleAll();
+        // 非管理员不可见/不可授予超级管理员角色，过滤掉 isAdmin 的角色
+        ajax.put("roles", SecurityUtils.isAdmin(userId) ? roles
+                : roles.stream().filter(r -> !r.isAdmin()).collect(Collectors.toList()));
+        ajax.put("posts", postService.selectPostAll());
+        return ajax;
+    }
+
+    /**
+     * 新增用户
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:add')")
+    @Log(title = "用户管理", businessType = BusinessType.INSERT)
+    @PostMapping
+    public AjaxResult add(@Validated @RequestBody SysUser user) {
+        deptService.checkDeptDataScope(user.getDeptId());
+        roleService.checkRoleDataScope(user.getRoleIds());
+        if (!userService.checkUserNameUnique(user)) {
+            return error("新增用户'" + user.getUserName() + "'失败，登录账号已存在");
+        } else if (StringUtils.isNotEmpty(user.getPhonenumber()) && !userService.checkPhoneUnique(user)) {
+            return error("新增用户'" + user.getUserName() + "'失败，手机号码已存在");
+        } else if (StringUtils.isNotEmpty(user.getEmail()) && !userService.checkEmailUnique(user)) {
+            return error("新增用户'" + user.getUserName() + "'失败，邮箱账号已存在");
+        }
+        user.setCreateBy(getUsername());
+        user.setPassword(SecurityUtils.encryptPassword(user.getPassword()));
+        return toAjax(userService.insertUser(user));
+    }
+
+    /**
+     * 修改用户
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:edit')")
+    @Log(title = "用户管理", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public AjaxResult edit(@Validated @RequestBody SysUser user) {
+        userService.checkUserAllowed(user);
+        userService.checkUserDataScope(user.getUserId());
+        deptService.checkDeptDataScope(user.getDeptId());
+        roleService.checkRoleDataScope(user.getRoleIds());
+        if (!userService.checkUserNameUnique(user)) {
+            return error("修改用户'" + user.getUserName() + "'失败，登录账号已存在");
+        } else if (StringUtils.isNotEmpty(user.getPhonenumber()) && !userService.checkPhoneUnique(user)) {
+            return error("修改用户'" + user.getUserName() + "'失败，手机号码已存在");
+        } else if (StringUtils.isNotEmpty(user.getEmail()) && !userService.checkEmailUnique(user)) {
+            return error("修改用户'" + user.getUserName() + "'失败，邮箱账号已存在");
+        }
+        user.setUpdateBy(getUsername());
+        return toAjax(userService.updateUser(user));
+    }
+
+    /**
+     * 删除用户
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:remove')")
+    @Log(title = "用户管理", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{userIds}")
+    public AjaxResult remove(@PathVariable Long[] userIds) {
+        // 拦截把当前登录用户自己删掉的误操作
+        if (ArrayUtils.contains(userIds, getUserId())) {
+            return error("当前用户不能删除");
+        }
+        return toAjax(userService.deleteUserByIds(userIds));
+    }
+
+    /**
+     * 重置密码
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:resetPwd')")
+    @Log(title = "用户管理", businessType = BusinessType.UPDATE)
+    @PutMapping("/resetPwd")
+    public AjaxResult resetPwd(@RequestBody SysUser user) {
+        userService.checkUserAllowed(user);
+        userService.checkUserDataScope(user.getUserId());
+        user.setPassword(SecurityUtils.encryptPassword(user.getPassword()));
+        user.setUpdateBy(getUsername());
+        return toAjax(userService.resetPwd(user));
+    }
+
+    /**
+     * 状态修改
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:edit')")
+    @Log(title = "用户管理", businessType = BusinessType.UPDATE)
+    @PutMapping("/changeStatus")
+    public AjaxResult changeStatus(@RequestBody SysUser user) {
+        userService.checkUserAllowed(user);
+        userService.checkUserDataScope(user.getUserId());
+        user.setUpdateBy(getUsername());
+        return toAjax(userService.updateUserStatus(user));
+    }
+
+    /**
+     * 根据用户编号获取授权角色
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:query')")
+    @GetMapping("/authRole/{userId}")
+    public AjaxResult authRole(@PathVariable("userId") Long userId) {
+        AjaxResult ajax = AjaxResult.success();
+        SysUser user = userService.selectUserById(userId);
+        List<SysRole> roles = roleService.selectRolesByUserId(userId);
+        ajax.put("user", user);
+        ajax.put("roles", SecurityUtils.isAdmin(userId) ? roles
+                : roles.stream().filter(r -> !r.isAdmin()).collect(Collectors.toList()));
+        return ajax;
+    }
+
+    /**
+     * 用户授权角色
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:edit')")
+    @Log(title = "用户管理", businessType = BusinessType.GRANT)
+    @PutMapping("/authRole")
+    public AjaxResult insertAuthRole(Long userId, Long[] roleIds) {
+        userService.checkUserDataScope(userId);
+        roleService.checkRoleDataScope(roleIds);
+        userService.insertUserAuth(userId, roleIds);
+        // 用户角色成员关系变化会改动缓存 LoginUser 的 roles 快照，软刷新权限集无法反映新角色集合，
+        // 故强制该用户下线重新登录，令收回/新增的角色及其数据范围即刻生效。
+        tokenService.delLoginUsers(userId);
+        return success();
+    }
+
+    /**
+     * 获取部门树列表
+     */
+    @PreAuthorize("@ss.hasPermi('system:user:list')")
+    @GetMapping("/deptTree")
+    public AjaxResult deptTree(SysDept dept) {
+        return success(deptService.selectDeptTreeList(dept));
+    }
+}

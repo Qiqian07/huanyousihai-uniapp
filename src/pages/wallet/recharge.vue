@@ -139,12 +139,12 @@ export default {
     submit() {
       if (this.submitting) return
       this.submitting = true
-      setTimeout(() => {
+      setTimeout(async () => {
         let r
         if (this.tab === '充值') {
-          r = store.recharge(this.amount)
+          r = await store.recharge(this.amount)
         } else {
-          r = store.transfer(this.target, this.amount)
+          r = await store.transfer(this.target, this.amount)
         }
         this.submitting = false
         if (!r.ok) {

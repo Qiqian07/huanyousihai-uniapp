@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.generator.mapper.GenTableColumnMapper">
+
+    <resultMap type="GenTableColumn" id="GenTableColumnResult">
+        <id property="columnId" column="column_id" />
+        <result property="tableId" column="table_id" />
+        <result property="tableName" column="table_name" />
+        <result property="columnName" column="column_name" />
+        <result property="columnComment" column="column_comment" />
+        <result property="columnType" column="column_type" />
+        <result property="javaType" column="java_type" />
+        <result property="javaField" column="java_field" />
+        <result property="isPk" column="is_pk" />
+        <result property="isIncrement" column="is_increment" />
+        <result property="isRequired" column="is_required" />
+        <result property="isInsert" column="is_insert" />
+        <result property="isEdit" column="is_edit" />
+        <result property="isList" column="is_list" />
+        <result property="isQuery" column="is_query" />
+        <result property="queryType" column="query_type" />
+        <result property="htmlType" column="html_type" />
+        <result property="dictType" column="dict_type" />
+        <result property="sort" column="sort" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <!-- 代码生成列配置表通用查询列 -->
+    <sql id="selectGenTableColumnVo"> select column_id, table_id, column_name, column_comment,
+        column_type, java_type, java_field, is_pk, is_increment, is_required, is_insert, is_edit,
+        is_list, is_query, query_type, html_type, dict_type, sort, create_by, create_time,
+        update_by, update_time from gen_table_column </sql>
+
+    <!-- 按生成表ID查询其所有列配置（按 sort 排序，用于生成预览/编辑时加载列） -->
+    <select id="selectGenTableColumnListByTableId" parameterType="Long"
+        resultMap="GenTableColumnResult">
+        <include refid="selectGenTableColumnVo" /> where table_id = #{tableId} order by sort </select>
+
+    <!-- 从 information_schema.columns 反向读取真实表结构：用 CASE 推导
+    is_required/is_pk/is_increment，按列序排序（导入表时用） -->
+    <select id="selectDbTableColumnsByName" parameterType="String" resultMap="GenTableColumnResult">
+        select column_name, (case when (is_nullable = 'no' <![CDATA[ && ]]> column_key != 'PRI') then '1' else '0'
+        end) as is_required, (case when column_key = 'PRI' then '1' else '0' end) as is_pk,
+        ordinal_position as sort, column_comment, (case when extra = 'auto_increment' then '1' else
+        '0' end) as is_increment, column_type from information_schema.columns where table_schema =
+        (select database()) and table_name = (#{tableName}) order by ordinal_position </select>
+
+    <!-- 多表导入：从 information_schema.columns 一次查回多个实表的列（按 table_name、ordinal_position 排序），
+         额外 select table_name 并映射到 GenTableColumn.tableName 作为分组键。tableNames 为空时退化为 1=0，
+         既避免 IN () 语法错，也不跨库泄露（table_schema 恒定限定当前库） -->
+    <select id="selectDbTableColumnsByNames" resultMap="GenTableColumnResult">
+        select table_name, column_name, (case when (is_nullable = 'no' <![CDATA[ && ]]> column_key != 'PRI')
+        then '1' else '0' end) as is_required, (case when column_key = 'PRI' then '1' else '0' end) as
+        is_pk, ordinal_position as sort, column_comment, (case when extra = 'auto_increment' then '1'
+        else '0' end) as is_increment, column_type from information_schema.columns where table_schema
+        = (select database())
+        <choose>
+            <when test="tableNames != null and tableNames.length > 0"> and table_name in <foreach
+                    collection="tableNames" item="name" open="(" separator="," close=")"> #{name} </foreach>
+            </when>
+            <otherwise> and 1 = 0</otherwise>
+        </choose>
+        order by table_name, ordinal_position </select>
+
+    <!-- 新增列配置：useGeneratedKeys 回写自增主键到 columnId，动态列仅插非空字段 -->
+    <insert id="insertGenTableColumn" parameterType="GenTableColumn" useGeneratedKeys="true"
+        keyProperty="columnId"> insert into gen_table_column ( <if
+            test="tableId != null and tableId != ''">table_id,</if>
+			<if
+            test="columnName != null and columnName != ''">column_name,</if>
+			<if
+            test="columnComment != null and columnComment != ''">column_comment,</if>
+			<if
+            test="columnType != null and columnType != ''">column_type,</if>
+			<if
+            test="javaType != null and javaType != ''">java_type,</if>
+			<if
+            test="javaField != null  and javaField != ''">java_field,</if>
+			<if
+            test="isPk != null and isPk != ''">is_pk,</if>
+			<if
+            test="isIncrement != null and isIncrement != ''">is_increment,</if>
+			<if
+            test="isRequired != null and isRequired != ''">is_required,</if>
+			<if
+            test="isInsert != null and isInsert != ''">is_insert,</if>
+			<if
+            test="isEdit != null and isEdit != ''">is_edit,</if>
+			<if
+            test="isList != null and isList != ''">is_list,</if>
+			<if
+            test="isQuery != null and isQuery != ''">is_query,</if>
+			<if
+            test="queryType != null and queryType != ''">query_type,</if>
+			<if
+            test="htmlType != null and htmlType != ''">html_type,</if>
+			<if
+            test="dictType != null and dictType != ''">dict_type,</if>
+			<if test="sort != null">sort,</if>
+			<if
+            test="createBy != null and createBy != ''">create_by,</if> create_time )values( <if
+            test="tableId != null and tableId != ''">#{tableId},</if>
+			<if
+            test="columnName != null and columnName != ''">#{columnName},</if>
+			<if
+            test="columnComment != null and columnComment != ''">#{columnComment},</if>
+			<if
+            test="columnType != null and columnType != ''">#{columnType},</if>
+			<if
+            test="javaType != null and javaType != ''">#{javaType},</if>
+			<if
+            test="javaField != null and javaField != ''">#{javaField},</if>
+			<if
+            test="isPk != null and isPk != ''">#{isPk},</if>
+			<if
+            test="isIncrement != null and isIncrement != ''">#{isIncrement},</if>
+			<if
+            test="isRequired != null and isRequired != ''">#{isRequired},</if>
+			<if
+            test="isInsert != null and isInsert != ''">#{isInsert},</if>
+			<if
+            test="isEdit != null and isEdit != ''">#{isEdit},</if>
+			<if
+            test="isList != null and isList != ''">#{isList},</if>
+			<if
+            test="isQuery != null and isQuery != ''">#{isQuery},</if>
+			<if
+            test="queryType != null and queryType != ''">#{queryType},</if>
+			<if
+            test="htmlType != null and htmlType != ''">#{htmlType},</if>
+			<if
+            test="dictType != null and dictType != ''">#{dictType},</if>
+			<if test="sort != null">
+        #{sort},</if>
+			<if test="createBy != null and createBy != ''">#{createBy},</if> sysdate() ) </insert>
+
+    <!-- 批量新增列配置：导入表时把多列合并为一条多值 INSERT，减少 N 次往返。列除主键外全部可空，
+         未设置字段以 NULL 入库（下游用 isNotEmpty 判定，NULL 与 '' 等价），故用固定列名而非动态跳过 -->
+    <insert id="batchInsertGenTableColumn" parameterType="java.util.List"> insert into gen_table_column
+        (table_id, column_name, column_comment, column_type, java_type, java_field, is_pk, is_increment,
+        is_required, is_insert, is_edit, is_list, is_query, query_type, html_type, dict_type, sort,
+        create_by, create_time) values <foreach collection="columns" item="item" separator=",">
+        (#{item.tableId}, #{item.columnName}, #{item.columnComment}, #{item.columnType}, #{item.javaType},
+        #{item.javaField}, #{item.isPk}, #{item.isIncrement}, #{item.isRequired}, #{item.isInsert},
+        #{item.isEdit}, #{item.isList}, #{item.isQuery}, #{item.queryType}, #{item.htmlType},
+        #{item.dictType}, #{item.sort}, #{item.createBy}, sysdate()) </foreach>
+    </insert>
+
+    <!-- 修改列配置：动态 SET 仅更新非 null 字段（布尔类 is_* 判 null 而非空串以保留 '0'），update_time 强制刷新 -->
+    <update id="updateGenTableColumn" parameterType="GenTableColumn"> update gen_table_column <set>
+            <if test="columnComment != null">column_comment = #{columnComment},</if>
+            <if
+                test="javaType != null">java_type = #{javaType},</if>
+            <if test="columnType != null">column_type
+        = #{columnType},</if>
+            <if test="javaField != null">java_field = #{javaField},</if>
+            <if
+                test="isInsert != null">is_insert = #{isInsert},</if>
+            <if test="isEdit != null">is_edit
+        = #{isEdit},</if>
+            <if test="isList != null">is_list = #{isList},</if>
+            <if
+                test="isQuery != null">is_query = #{isQuery},</if>
+            <if test="isRequired != null">is_required
+        = #{isRequired},</if>
+            <if test="queryType != null">query_type = #{queryType},</if>
+            <if
+                test="htmlType != null">html_type = #{htmlType},</if>
+            <if test="dictType != null">dict_type
+        = #{dictType},</if>
+            <if test="sort != null">sort = #{sort},</if>
+            <if test="updateBy != null">update_by
+        = #{updateBy},</if> update_time = sysdate() </set> where column_id = #{columnId} </update>
+
+    <!-- 按生成表ID(table_id)批量删除其列配置：加空数组守卫，tableIds 为空时条件退化为 1=0（避免 IN () 语法错、也不全表删） -->
+    <delete id="deleteGenTableColumnByTableIds"> delete from gen_table_column <where>
+            <if test="tableIds != null and tableIds.length > 0">table_id in <foreach collection="tableIds"
+                    item="tableId" open="(" separator="," close=")"> #{tableId} </foreach>
+            </if>
+            <if test="tableIds == null or tableIds.length == 0">1 = 0</if>
+        </where>
+    </delete>
+
+    <!-- 按列主键批量删除：收窄为 columnIds(List<Long>)；加空集合守卫，为空时条件退化为 1=0 -->
+    <delete id="deleteGenTableColumns"> delete from gen_table_column <where>
+            <if test="columnIds != null and columnIds.size() > 0">column_id in <foreach
+                    collection="columnIds" item="columnId" open="(" separator="," close=")">
+                #{columnId} </foreach>
+            </if>
+            <if test="columnIds == null or columnIds.size() == 0">1 = 0</if>
+        </where>
+    </delete>
+
+</mapper>

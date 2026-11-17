@@ -30,7 +30,7 @@ export default {
     return { phone: '', newPwd: '', confirmPwd: '', error: '' }
   },
   methods: {
-    submit() {
+    async submit() {
       if (!this.phone) {
         this.error = '请填写账号 / 手机号'
         return
@@ -39,7 +39,7 @@ export default {
         store.toast('两次输入的新密码不一致')
         return
       }
-      const r = store.resetPassword(this.phone, this.newPwd)
+      const r = await store.resetPassword(this.phone, this.newPwd)
       if (!r.ok) {
         this.error = r.message
         return

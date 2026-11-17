@@ -19,3 +19,9 @@ npm-debug.log*
 yarn-error.log*
 .env.local
 .env.*.local
+
+# RuoYi 子工程构建产物与依赖
+ruoyi-springboot/**/target/
+ruoyi-vue3/node_modules/
+ruoyi-vue3/dist/
+ruoyi-springboot/.mvn/wrapper/*.zip

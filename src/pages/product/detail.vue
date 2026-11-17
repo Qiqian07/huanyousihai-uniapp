@@ -85,9 +85,9 @@ export default {
     this.item = store.state.products.find((p) => p.id === q.id) || store.state.products[0]
   },
   methods: {
-    buy() {
+    async buy() {
       const it = this.item
-      store.createOrder({
+      const order = await store.createOrder({
         kind: '商品',
         itemId: it.id,
         title: it.title,
@@ -95,6 +95,7 @@ export default {
         amount: this.price,
         thumb: it.cover
       })
+      if (!order) return /* API 模式失败时内部已提示 */
       store.toast('下单成功，待付款')
       setTimeout(() => uni.switchTab({ url: '/pages/order/index' }), 500)
     }

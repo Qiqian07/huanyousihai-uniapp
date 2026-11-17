@@ -1,0 +1,41 @@
+package com.ruoyi.web.controller.system;
+
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import com.ruoyi.common.core.controller.BaseController;
+import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.core.domain.model.RegisterBody;
+import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.framework.web.service.SysRegisterService;
+import com.ruoyi.system.service.ISysConfigService;
+
+/**
+ * 注册验证
+ * 
+ * @author HackerSnail <2306002088@qq.com>
+ */
+@RestController
+public class SysRegisterController extends BaseController {
+    private final SysRegisterService registerService;
+
+    private final ISysConfigService configService;
+
+    public SysRegisterController(SysRegisterService registerService, ISysConfigService configService) {
+        this.registerService = registerService;
+        this.configService = configService;
+    }
+
+    /**
+     * 用户注册
+     */
+    @PostMapping("/register")
+    public AjaxResult register(@RequestBody RegisterBody user) {
+        // 注册开关由参数 sys.account.registerUser 控制，未开启时直接拒绝
+        if (!("true".equals(configService.selectConfigByKey("sys.account.registerUser")))) {
+            return error("当前系统没有开启注册功能！");
+        }
+        String msg = registerService.register(user);
+        return StringUtils.isEmpty(msg) ? success() : error(msg);
+    }
+}

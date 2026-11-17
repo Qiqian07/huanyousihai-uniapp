@@ -135,13 +135,13 @@ export default {
     playVideo() {
       uni.showToast({ title: '小视频素材由运营上传', icon: 'none' })
     },
-    signup() {
+    async signup() {
       if (!store.state.loggedIn) {
         uni.navigateTo({ url: '/pages/auth/login' })
         return
       }
       const r = this.route
-      store.createOrder({
+      const order = await store.createOrder({
         kind: '线路',
         itemId: r.id,
         title: r.title,
@@ -149,6 +149,7 @@ export default {
         amount: this.price,
         thumb: r.cover
       })
+      if (!order) return /* API 模式失败时内部已提示 */
       store.toast('下单成功，待付款')
       setTimeout(() => {
         uni.switchTab({ url: '/pages/order/index' })

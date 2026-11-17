@@ -1,0 +1,70 @@
+package com.ruoyi.common.filter;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.common.enums.HttpMethod;
+
+/**
+ * 防止XSS攻击的过滤器
+ * 
+ * @author HackerSnail <2306002088@qq.com>
+ */
+public class XssFilter implements Filter {
+    /**
+     * 排除链接（仅本类使用，故为 private）
+     * <p>
+     * 采 Ant 风格路径匹配，但比对的是 request.getServletPath() 的精确路径；
+     * 如需覆盖某路径及其子路径（如 /system/notice/**），必须在配置里显式写出 **，只写父路径不会自动子匹配
+     */
+    private List<String> excludes = new ArrayList<>();
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+        String tempExcludes = filterConfig.getInitParameter("excludes");
+        if (StringUtils.isNotEmpty(tempExcludes)) {
+            String[] urls = tempExcludes.split(",");
+            for (String url : urls) {
+                excludes.add(url);
+            }
+        }
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        HttpServletRequest req = (HttpServletRequest) request;
+        HttpServletResponse resp = (HttpServletResponse) response;
+        if (handleExcludeURL(req, resp)) {
+            chain.doFilter(request, response);
+            return;
+        }
+        XssHttpServletRequestWrapper xssRequest = new XssHttpServletRequestWrapper((HttpServletRequest) request);
+        chain.doFilter(xssRequest, response);
+    }
+
+    private boolean handleExcludeURL(HttpServletRequest request, HttpServletResponse response) {
+        String url = request.getServletPath();
+        String method = request.getMethod();
+        // DELETE 不过滤（幂等、通常不携带待清洗内容）；GET 纳入参数清洗：
+        // 反射型 XSS 常经 URL 查询参数注入，故不再对 GET 短路放行，使其经 XssHttpServletRequestWrapper.getParameterValues 转义
+        if (method == null || HttpMethod.DELETE.matches(method)) {
+            return true;
+        }
+        return StringUtils.matches(url, excludes);
+    }
+
+    @Override
+    public void destroy() {
+
+    }
+}

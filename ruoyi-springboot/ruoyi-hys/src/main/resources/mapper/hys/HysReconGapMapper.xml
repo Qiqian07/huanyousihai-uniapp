@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.hys.mapper.HysReconGapMapper">
+
+    <resultMap type="HysReconGap" id="HysReconGapResult">
+        <id     property="gapId"          column="gap_id"/>
+        <result property="orderId"        column="order_id"/>
+        <result property="memberId"       column="member_id"/>
+        <result property="reason"         column="reason"/>
+        <result property="amountCents"    column="amount_cents"/>
+        <result property="note"           column="note"/>
+        <result property="status"         column="status"/>
+        <result property="repairedBy"     column="repaired_by"/>
+        <result property="repairedTime"   column="repaired_time"/>
+        <result property="createTime"     column="create_time"/>
+        <result property="memberName"     column="member_name"/>
+        <result property="memberPhone"    column="member_phone"/>
+        <result property="repairedByName" column="repaired_by_name"/>
+    </resultMap>
+
+    <select id="selectById" parameterType="Long" resultMap="HysReconGapResult">
+        select g.*, m.name as member_name, m.phone as member_phone, a.nick_name as repaired_by_name
+        from hys_recon_gap g
+        left join hys_member m on m.member_id = g.member_id
+        left join sys_user a on a.user_id = g.repaired_by
+        where g.gap_id = #{gapId}
+    </select>
+
+    <select id="selectByOrderId" parameterType="String" resultMap="HysReconGapResult">
+        select g.*, m.name as member_name, m.phone as member_phone, a.nick_name as repaired_by_name
+        from hys_recon_gap g
+        left join hys_member m on m.member_id = g.member_id
+        left join sys_user a on a.user_id = g.repaired_by
+        where g.order_id = #{orderId}
+    </select>
+
+    <select id="selectList" parameterType="HysReconGap" resultMap="HysReconGapResult">
+        select g.*, m.name as member_name, m.phone as member_phone, a.nick_name as repaired_by_name
+        from hys_recon_gap g
+        left join hys_member m on m.member_id = g.member_id
+        left join sys_user a on a.user_id = g.repaired_by
+        <where>
+            <if test="status != null and status != ''">and g.status = #{status}</if>
+            <if test="memberId != null">and g.member_id = #{memberId}</if>
+            <if test="orderId != null and orderId != ''">and g.order_id like concat('%', #{orderId}, '%')</if>
+        </where>
+        order by g.gap_id desc
+    </select>
+
+    <insert id="insertGap" parameterType="HysReconGap" useGeneratedKeys="true" keyProperty="gapId">
+        insert into hys_recon_gap (order_id, member_id, reason, amount_cents, note, status, repaired_by, repaired_time, create_time)
+        values (#{orderId}, #{memberId}, #{reason}, #{amountCents}, #{note}, #{status}, #{repairedBy}, #{repairedTime}, #{createTime})
+    </insert>
+
+    <update id="updateStatus" parameterType="HysReconGap">
+        update hys_recon_gap
+        set status = #{status},
+            repaired_by = #{repairedBy},
+            repaired_time = #{repairedTime},
+            note = #{note}
+        where gap_id = #{gapId} and status = 'OPEN'
+    </update>
+</mapper>

@@ -59,12 +59,12 @@ export default {
       this.phone = u.phone
       this.password = ''
     },
-    submit() {
+    async submit() {
       if (!this.phone) {
         this.error = '请填写账号 / 手机号'
         return
       }
-      const r = store.login(this.phone, this.password)
+      const r = await store.login(this.phone, this.password)
       if (!r.ok) {
         this.error = ''
         store.toast(r.message)

@@ -108,8 +108,8 @@ export default {
     if (q.name) store.state.inviteFrom = q.name
   },
   methods: {
-    submit() {
-      const r = store.register(this.form)
+    async submit() {
+      const r = await store.register(this.form)
       if (!r.ok) {
         this.errors = r.errors
         this.formError = r.errors.referrerCode || Object.values(r.errors)[0] || '请完善信息'

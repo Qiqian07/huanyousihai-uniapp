@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.hys.mapper.HysWalletTxnMapper">
+
+    <resultMap type="HysWalletTxn" id="HysWalletTxnResult">
+        <id     property="txnId"       column="txn_id"/>
+        <result property="memberId"    column="member_id"/>
+        <result property="type"        column="type"/>
+        <result property="amountCents" column="amount_cents"/>
+        <result property="feeCents"    column="fee_cents"/>
+        <result property="counterparty" column="counterparty"/>
+        <result property="status"      column="status"/>
+        <result property="orderId"     column="order_id"/>
+        <result property="createTime"  column="create_time"/>
+    </resultMap>
+
+    <sql id="selectColumns">
+        select txn_id, member_id, type, amount_cents, fee_cents, counterparty, status, order_id, create_time
+        from hys_wallet_txn
+    </sql>
+
+    <select id="selectByMember" parameterType="Long" resultMap="HysWalletTxnResult">
+        <include refid="selectColumns"/>
+        where member_id = #{memberId} order by txn_id desc
+    </select>
+
+    <select id="selectList" parameterType="HysWalletTxn" resultMap="HysWalletTxnResult">
+        <include refid="selectColumns"/>
+        <where>
+            <if test="memberId != null">and member_id = #{memberId}</if>
+            <if test="type != null and type != ''">and type = #{type}</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+        </where>
+        order by txn_id desc
+    </select>
+
+    <insert id="insertTxn" parameterType="HysWalletTxn" useGeneratedKeys="true" keyProperty="txnId">
+        insert into hys_wallet_txn (member_id, type, amount_cents, fee_cents, counterparty, status, order_id, create_time)
+        values (#{memberId}, #{type}, #{amountCents}, #{feeCents}, #{counterparty}, #{status}, #{orderId}, #{createTime})
+    </insert>
+
+    <update id="updateStatus">
+        update hys_wallet_txn set status = #{status} where txn_id = #{txnId}
+    </update>
+</mapper>

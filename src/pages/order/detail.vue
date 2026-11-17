@@ -92,8 +92,8 @@ export default {
     this.order = store.state.orders.find((o) => o.id === q.id) || null
   },
   methods: {
-    pay() {
-      const r = store.payOrder(this.id)
+    async pay() {
+      const r = await store.payOrder(this.id)
       if (!r.ok) {
         store.toast(r.message)
         return

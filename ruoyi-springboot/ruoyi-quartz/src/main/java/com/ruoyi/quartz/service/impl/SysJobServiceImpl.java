@@ -1,0 +1,270 @@
+package com.ruoyi.quartz.service.impl;
+
+import java.util.List;
+import jakarta.annotation.PostConstruct;
+import org.quartz.JobDataMap;
+import org.quartz.JobKey;
+import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.ruoyi.common.constant.ScheduleConstants;
+import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.exception.job.TaskException;
+import com.ruoyi.quartz.domain.SysJob;
+import com.ruoyi.quartz.mapper.SysJobMapper;
+import com.ruoyi.quartz.service.ISysJobService;
+import com.ruoyi.quartz.util.CronUtils;
+import com.ruoyi.quartz.util.ScheduleUtils;
+
+/**
+ * 定时任务调度信息 服务层
+ * 
+ * @author HackerSnail <2306002088@qq.com>
+ */
+@Service
+public class SysJobServiceImpl implements ISysJobService {
+    /** 单次批量删除任务的最大条数上限：收口于 Service，与调度日志删除同一口径 */
+    private static final int MAX_DELETE_BATCH = 500;
+
+    private final Scheduler scheduler;
+
+    private final SysJobMapper jobMapper;
+
+    public SysJobServiceImpl(Scheduler scheduler, SysJobMapper jobMapper) {
+        this.scheduler = scheduler;
+        this.jobMapper = jobMapper;
+    }
+
+    /**
+     * 项目启动时，初始化定时器 主要是防止手动修改数据库导致未同步到定时任务处理（注：不能手动修改数据库ID和任务组名，否则会导致脏数据）
+     */
+    @PostConstruct
+    public void init() throws SchedulerException, TaskException {
+        // 先清空调度器内存量 Job，再以数据库为准全量重建，保证二者一致（避免手动改库遗留脏 Job）
+        scheduler.clear();
+        List<SysJob> jobList = jobMapper.selectJobAll();
+        for (SysJob job : jobList) {
+            ScheduleUtils.createScheduleJob(scheduler, job);
+        }
+    }
+
+    /**
+     * 获取quartz调度器的计划任务列表
+     * 
+     * @param job 调度信息
+     * @return
+     */
+    @Override
+    public List<SysJob> selectJobList(SysJob job) {
+        return jobMapper.selectJobList(job);
+    }
+
+    /**
+     * 通过调度任务ID查询调度信息
+     * 
+     * @param jobId 调度任务ID
+     * @return 调度任务对象信息
+     */
+    @Override
+    public SysJob selectJobById(Long jobId) {
+        return jobMapper.selectJobById(jobId);
+    }
+
+    /**
+     * 暂停任务
+     * 
+     * @param job 调度信息
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int pauseJob(SysJob job) throws SchedulerException {
+        Long jobId = job.getJobId();
+        String jobGroup = job.getJobGroup();
+        job.setStatus(ScheduleConstants.Status.PAUSE.getValue());
+        // 先更新 DB 状态，成功后再同步调度器；配合 @Transactional，scheduler 抛异常时 DB 变更回滚，避免状态不一致
+        int rows = jobMapper.updateJob(job);
+        if (rows > 0) {
+            scheduler.pauseJob(ScheduleUtils.getJobKey(jobId, jobGroup));
+        }
+        return rows;
+    }
+
+    /**
+     * 恢复任务
+     * 
+     * @param job 调度信息
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int resumeJob(SysJob job) throws SchedulerException {
+        Long jobId = job.getJobId();
+        String jobGroup = job.getJobGroup();
+        job.setStatus(ScheduleConstants.Status.NORMAL.getValue());
+        int rows = jobMapper.updateJob(job);
+        if (rows > 0) {
+            scheduler.resumeJob(ScheduleUtils.getJobKey(jobId, jobGroup));
+        }
+        return rows;
+    }
+
+    /**
+     * 删除任务后，所对应的trigger也将被删除
+     * 
+     * @param job 调度信息
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteJob(SysJob job) throws SchedulerException {
+        Long jobId = job.getJobId();
+        String jobGroup = job.getJobGroup();
+        // 先删 DB 记录，再删调度器中的 Job（连同其 trigger）；DB 未删成功则不动调度器
+        int rows = jobMapper.deleteJobById(jobId);
+        if (rows > 0) {
+            scheduler.deleteJob(ScheduleUtils.getJobKey(jobId, jobGroup));
+        }
+        return rows;
+    }
+
+    /**
+     * 批量删除调度信息
+     * 
+     * @param jobIds 需要删除的任务ID
+     * @return 实际删除的行数
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteJobByIds(Long[] jobIds) throws SchedulerException {
+        // 批量删除收口于 Service：空选与超上限均拒（抛 ServiceException 由全局异常处理转友好 error），
+        // 防止逐个 select+delete+unschedule 放大调度器/数据库压力
+        if (jobIds == null || jobIds.length == 0) {
+            throw new ServiceException("请选择要删除的任务");
+        }
+        if (jobIds.length > MAX_DELETE_BATCH) {
+            throw new ServiceException("单次最多删除 " + MAX_DELETE_BATCH + " 条任务，当前 " + jobIds.length + " 条");
+        }
+        int rows = 0;
+        for (Long jobId : jobIds) {
+            SysJob job = jobMapper.selectJobById(jobId);
+            // 库中不存在（传入陈旧 ID 或已被并发删除）则跳过，避免 deleteJob 解引用 null NPE 致整批事务回滚
+            if (job != null) {
+                rows += deleteJob(job);
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * 任务调度状态修改
+     * 
+     * @param job 调度信息
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int changeStatus(SysJob job) throws SchedulerException {
+        int rows = 0;
+        String status = job.getStatus();
+        if (ScheduleConstants.Status.NORMAL.getValue().equals(status)) {
+            rows = resumeJob(job);
+        } else if (ScheduleConstants.Status.PAUSE.getValue().equals(status)) {
+            rows = pauseJob(job);
+        }
+        return rows;
+    }
+
+    /**
+     * 立即运行任务。
+     *
+     * <p>
+     * 安全契约：仅按 {@code job.getJobId()} 从库重载完整记录（{@code selectJobById}）并以该库记录构造
+     * JobDataMap 触发，且只有 {@code checkExists} 命中（即已注册、入库时已过白名单校验）才会执行；
+     * 请求体的 invokeTarget 等字段一律不被采用，故本方法不构成绕过白名单的 RCE 通道。
+     * </p>
+     *
+     * @param job 调度信息（实际仅取 jobId/jobGroup 定位已注册任务）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean run(SysJob job) throws SchedulerException {
+        boolean result = false;
+        Long jobId = job.getJobId();
+        String jobGroup = job.getJobGroup();
+        // 取库中最新的任务配置（而非前端传入的 job），避免使用陈旧参数触发
+        SysJob properties = selectJobById(job.getJobId());
+        // 参数
+        JobDataMap dataMap = new JobDataMap();
+        dataMap.put(ScheduleConstants.TASK_PROPERTIES, properties);
+        JobKey jobKey = ScheduleUtils.getJobKey(jobId, jobGroup);
+        if (scheduler.checkExists(jobKey)) {
+            // triggerJob 立即以传入 dataMap 触发一次，不影响原有的 cron 调度计划
+            result = true;
+            scheduler.triggerJob(jobKey, dataMap);
+        }
+        return result;
+    }
+
+    /**
+     * 新增任务
+     * 
+     * @param job 调度信息 调度信息
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int insertJob(SysJob job) throws SchedulerException, TaskException {
+        // 安全校验收口于入库/更新：cron/invokeTarget 判空 + rmi/ldap/http 拒绝 + 白名单，覆盖所有非 HTTP 入口
+        ScheduleUtils.validateJob(job);
+        // 新增任务默认置为暂停状态，交由用户手动启动，避免入库即意外触发
+        job.setStatus(ScheduleConstants.Status.PAUSE.getValue());
+        int rows = jobMapper.insertJob(job);
+        if (rows > 0) {
+            ScheduleUtils.createScheduleJob(scheduler, job);
+        }
+        return rows;
+    }
+
+    /**
+     * 更新任务的时间表达式
+     * 
+     * @param job 调度信息
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int updateJob(SysJob job) throws SchedulerException, TaskException {
+        // 与新增走同一套入库/更新安全校验收口
+        ScheduleUtils.validateJob(job);
+        SysJob properties = selectJobById(job.getJobId());
+        int rows = jobMapper.updateJob(job);
+        if (rows > 0) {
+            updateSchedulerJob(job, properties.getJobGroup());
+        }
+        return rows;
+    }
+
+    /**
+     * 更新任务
+     * 
+     * @param job      任务对象
+     * @param jobGroup 任务组名
+     */
+    public void updateSchedulerJob(SysJob job, String jobGroup) throws SchedulerException, TaskException {
+        Long jobId = job.getJobId();
+        // 判断是否存在
+        JobKey jobKey = ScheduleUtils.getJobKey(jobId, jobGroup);
+        if (scheduler.checkExists(jobKey)) {
+            // Quartz 不提供“原地替换” JobDetail 的 API，故先移除旧 Job 再重建，防止创建时存在数据问题
+            scheduler.deleteJob(jobKey);
+        }
+        ScheduleUtils.createScheduleJob(scheduler, job);
+    }
+
+    /**
+     * 校验cron表达式是否有效
+     * 
+     * @param cronExpression 表达式
+     * @return 结果
+     */
+    @Override
+    public boolean checkCronExpressionIsValid(String cronExpression) {
+        return CronUtils.isValid(cronExpression);
+    }
+}

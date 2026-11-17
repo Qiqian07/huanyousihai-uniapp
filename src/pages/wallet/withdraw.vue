@@ -125,8 +125,8 @@ export default {
     submit() {
       if (!this.canSubmit || this.submitting) return
       this.submitting = true
-      setTimeout(() => {
-        const r = store.withdraw(this.amount)
+      setTimeout(async () => {
+        const r = await store.withdraw(this.amount)
         this.submitting = false
         if (!r.ok) {
           this.error = r.message
